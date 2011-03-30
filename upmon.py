@@ -1,20 +1,21 @@
 import os, sys
 import sqlite3
+import ping_delay
 from platform import node
 
-def ping_host(srv_hostname):
-    if (sys.platform == "win32"):
-        # win
-        pkey = 'n'
-    else:
-        # posix
-        pkey = 'c'
-    f = os.popen('ping -' + pkey + ' 1 ' + str(srv_hostname))
-    if f.read().lower().count('ttl'):
-        ans_time = 50#TODO f.read()[:]
-        return ans_time
-    else:
-        return 0
+#def ping_host(srv_hostname):
+#    if (sys.platform == "win32"):
+        ## win
+#        pkey = 'n'
+#    else:
+#        # posix
+#        pkey = 'c'
+#    f = os.popen('ping -' + pkey + ' 1 ' + str(srv_hostname))
+#    if f.read().lower().count('ttl'):
+#    ans_time = ping_delay.delay * 1000
+#    return ans_time
+#    else:
+#       return 0
 
 def hlp():
     print('''Usage: [function] [parameters] \n
@@ -27,15 +28,15 @@ def hlp():
                         ''')
 
 
-def read_arg():
-    args = []
-    for arg in sys.argv[2:4]:
-      args.append(arg)
-    if len(args) ==1 :
-        return args[0]
-    else:
+#def read_arg():
+#    args = []
+#    for arg in sys.argv[2:4]:
+#      args.append(arg)
+#    if len(args) ==1 :
+#        return args[0]
+#    else:
 #        print(args[0],args[1])
-        return args[0] #, args[1]  #TODO: убрать костыль
+#        return args[0] #, args[1]  #TODO: убрать костыль
 
 def ins_db(hostname = [],repit_t = 5000,ch = True):
     try:
@@ -59,6 +60,7 @@ def fetch_hosts(primary = True):
         for hostname, time in c.execute('select h,t  from hosts_for_ping where p=?',(primary,)):
             hostnames.append(hostname)
             times.append(time)
+            #print(hostnames)
     except sqlite3.OperationalError:
         print('DB is empty, add host first \n')
         hlp()
@@ -82,22 +84,28 @@ c = connection.cursor()
 if len(sys.argv) > 1:
     if sys.argv[1] in ('-h','-help','--help'):
         hlp()
-    elif sys.argv[1] == 'add':                  #если добавляем
-        ins_db(read_arg())
+    elif sys.argv[1] == 'add':             #если добавляем
+        if len(sys.argv) == 3:
+            ins_db(sys.argv[2])
+        else:
+            ins_db(sys.argv[2],sys.argv[3])
     elif sys.argv[1] == 'del':
-        del_db(read_arg())
+        del_db(sys.argv[2])
 
 ###c.execute('drop table ping_stat')
 
 host_primary = []
 hosts_primary = fetch_hosts()
+
 for hostname in hosts_primary[0]:
 #    ins_db(hostname)
     servname = node()
+    ho = ping_delay.delay * 1000
+#    print(ho, '!!!!!!!!!!!!!!!!!!!!!!!!\n')
     try:
         c.execute('create table ping_stat(h,s,t)')
     except sqlite3.OperationalError:
-        c.execute("insert into ping_stat values(?,?,?)", (hostname,servname,ping_host(hostname)))
+        c.execute("insert into ping_stat values(?,?,?)", (hostname,servname,ho))
         connection.commit()
 
 

@@ -168,17 +168,17 @@ def do_one(dest_addr, timeout):
     Returns either the delay (in seconds) or none on timeout.
     """
     icmp = socket.getprotobyname("icmp")
-    try:
-        my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
-    except socket.error as (errno, msg): # TODO: fix for python3
-        if errno == 1:
-            # Operation not permitted
-            msg = msg + (
-                " - Note that ICMP messages can only be sent from processes"
-                " running as root."
-            )
-            raise socket.error(msg)
-        raise # raise the original error
+#    try:
+    my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
+#    except socket.error as (errno, msg): # TODO: fix for python3
+#        if errno == 1:
+#            # Operation not permitted
+#            msg = msg + (
+#                " - Note that ICMP messages can only be sent from processes"
+#                " running as root."
+#            )
+#            raise socket.error(msg)
+#        raise # raise the original error
 
     my_ID = os.getpid() & 0xFFFF
 
@@ -194,7 +194,7 @@ def verbose_ping(dest_addr, timeout = 2, count = 4):
     Send >count< ping to >dest_addr< with the given >timeout< and display
     the result.
     """
-    for i in xrange(count):
+    for i in range(count):
         print ("ping %s..." % dest_addr,)
         try:
             delay  =  do_one(dest_addr, timeout)
