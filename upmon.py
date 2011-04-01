@@ -3,19 +3,6 @@ import sqlite3
 import ping_delay
 from platform import node
 
-#def ping_host(srv_hostname):
-#    if (sys.platform == "win32"):
-        ## win
-#        pkey = 'n'
-#    else:
-#        # posix
-#        pkey = 'c'
-#    f = os.popen('ping -' + pkey + ' 1 ' + str(srv_hostname))
-#    if f.read().lower().count('ttl'):
-#    ans_time = ping_delay.delay * 1000
-#    return ans_time
-#    else:
-#       return 0
 
 def hlp():
     print('''Usage: [function] [parameters] \n
@@ -42,8 +29,11 @@ def ins_db(hostname = [],repit_t = 5000,ch = True):
     try:
         c.execute('create table hosts_for_ping(h,t,p)')
     except sqlite3.OperationalError:
-        c.execute("insert into hosts_for_ping values(?,?,?)", (hostname,repit_t,ch))
-        connection.commit()
+        try:
+            c.execute('select * from hosts_for_ping where h=?',(hostname))
+        except sqlite3.OperationalError:
+            c.execute("insert into hosts_for_ping values(?,?,?)", (hostname,repit_t,ch))
+            connection.commit()
 
 def del_db(hostmane):
     try:
@@ -60,26 +50,13 @@ def fetch_hosts(primary = True):
         for hostname, time in c.execute('select h,t  from hosts_for_ping where p=?',(primary,)):
             hostnames.append(hostname)
             times.append(time)
-            #print(hostnames)
     except sqlite3.OperationalError:
         print('DB is empty, add host first \n')
         hlp()
     return hostnames, times
 
-
-
-
-#def fetch_all():
-#    hostnames = []
-#    for hostname in cursor.execute('select * from hosts_for_ping where p=?',(primary,)):
-#        hostnames.append(hostname[0])
-#    return hostnames
-
-
 connection =  sqlite3.connect("upmondb")
 c = connection.cursor()
-
-
 
 if len(sys.argv) > 1:
     if sys.argv[1] in ('-h','-help','--help'):
@@ -92,24 +69,18 @@ if len(sys.argv) > 1:
     elif sys.argv[1] == 'del':
         del_db(sys.argv[2])
 
-###c.execute('drop table ping_stat')
-
 host_primary = []
 hosts_primary = fetch_hosts()
 
 for hostname in hosts_primary[0]:
-#    ins_db(hostname)
     servname = node()
     ho = ping_delay.delay * 1000
-#    print(ho, '!!!!!!!!!!!!!!!!!!!!!!!!\n')
     try:
         c.execute('create table ping_stat(h,s,t)')
     except sqlite3.OperationalError:
         c.execute("insert into ping_stat values(?,?,?)", (hostname,servname,ho))
         connection.commit()
 
-
-        
 print('Первая табл\n')
 for i in c.execute('select * from hosts_for_ping'):
     print(i)
