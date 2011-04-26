@@ -62,7 +62,7 @@ def receive_one_ping(my_socket, ID, timeout):
 icmp = socket.getprotobyname("icmp")
 my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
 my_ID = os.getpid() & 0xFFFF
-def ping_result (dest_addr):
-    timeout = 2
-    send_one_ping(my_socket, dest_addr, my_ID)
-    return receive_one_ping(my_socket, my_ID, timeout)
+dest_addr = 'www.com'
+timeout = 2
+send_one_ping(my_socket, dest_addr, my_ID)
+delay = receive_one_ping(my_socket, my_ID, timeout)
