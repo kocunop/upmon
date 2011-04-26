@@ -11,10 +11,12 @@ class Ping_host(threading.Thread):
     def __init__(self, host):
         self.host = host
         threading.Thread.__init__(self)
+        connection =  sqlite3.connect("upmondb")
+        c = connection.cursor()
 
     def run(self):
         print('bbbb ',self.host, 'self_host \n', ping_delay.ping_result(self.host))
-        sqlite3.connect("upmondb").cursor().execute("insert into ping_stat values(?,?,?)", (self.host,'koc',ping_delay.ping_result(self.host)))
+        c.execute("insert into ping_stat values(?,?,?)", (self.host,'koc',ping_delay.ping_result(self.host)))
 #        ping_add_result_in_db(self.host)
 
 
