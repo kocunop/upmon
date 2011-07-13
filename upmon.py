@@ -1,111 +1,168 @@
+#!/usr/bin/env python
+# coding=utf8
 import os, sys
 import sqlite3
 import ping_delay
 import threading
+import collections
+import time
+import datetime
+import queue
 from platform import node
+from optparse import OptionParser
+
+
+if sys.platform == "win32":
+    DEFAULT_TIMER = time.clock
+else:
+    DEFAULT_TIMER = time.time
+
 
 SERVERNAME = node()
+CONNECTION =  sqlite3.connect("upmondb")
+C = CONNECTION.cursor()
+
+
+class Hosts:
+    def __init__(self, hostname, time_delay):
+        self.hostname = hostname
+        self.time_delay = int(time_delay)
+    def name (self):
+        return self.hostname
+    def delay (self):
+        return self.time_delay
+    def __repr__(self):
+        return repr((self.hostname, self.time_delay))
+
+class Sheduler(threading.Thread):
+    def __init__(self, sheduler_queue, hosts):
+        self.hosts = hosts
+        self.sheduler_queue = sheduler_queue
+        threading.Thread.__init__(self)
+    def run(self):
+        print(self.hosts)
+        while True:
+            for tmp_host in self.hosts:
+                print(round(time.clock()))
+                if round(time.clock()) % tmp_host.delay()== 0:
+                    print(round(time.clock()), 'hostname', tmp_host.name())
+                    self.sheduler_queue.put(tmp_host.name())
+            time.sleep(1)
+
 
 class Ping_host(threading.Thread):
-
-    def __init__(self, host):
-        self.host = host
+    def __init__(self, sheduler_queue):
+        self.sheduler_queue = sheduler_queue
         threading.Thread.__init__(self)
 
     def run(self):
-        print('bbbb ',self.host, 'self_host \n', ping_delay.ping_result(self.host))
-        sqlite3.connect("upmondb").cursor().execute("insert into ping_stat values(?,?,?)", (self.host,'koc',ping_delay.ping_result(self.host)))
-#        ping_add_result_in_db(self.host)
+        while True:
+            try:
+                host = self.sheduler_queue.get()
+                self.process(host)
+                self.sheduler_queue.join()
+            finally:
+                self.sheduler_queue.task_done()
 
 
 
-def hlp():
-    print('''Usage: [function] [parameters] \n
-      [function] \n
-        -add hostname [time(default 5000)]  - to add host in DB\n
-        -del hostname - to delete host from DB\n
-        -d - to run demon
-          example:\n
-           upmon.py -add 192.168.1.1 5000\n
-           upmon.py -del dev.z-gu.ru
-                        ''')
-def ping_add_result_in_db (hostname):
-        ho = ping_delay.ping_result((hostname))
-        c.execute("insert into ping_stat values(?,?,?)", (hostname,SERVERNAME,ho))
-        connection.commit()
+    def process(self, host):
+        print( ping_delay.ping_result(host), 'result \n',
+                host, '  date',time.strftime("%d %b %Y %H:%M:%S ", time.localtime()),'\n\n\n')
+#        sqlite3.connect("upmondb").cursor().execute("insert into ping_stat values(?,?,?)",
+#                 (host, SERVERNAME, ping_delay.ping_result(host)))
+#        C().commit()
+#        sqlite3.connect("upmondb").close()
+
 
 def ins_db(hostname,repit_t = 5000,ch = True):
     try:
-        c.execute('create table hosts_for_ping(h,t,p)')
+        CONNECTION.execute('create table hosts_for_ping(h,t,p)')
     except sqlite3.OperationalError: pass
-    else:
-        c.execute("insert into hosts_for_ping values(?,?,?)", (hostname,repit_t,ch))
-        connection.commit()
-        c.close()
+    finally:
+        C.execute("insert into hosts_for_ping values(?,?,?)", (hostname,repit_t,ch))
+        CONNECTION.commit()
 
 def del_db(hostmane):
     try:
-        c.execute('delete from hosts_for_ping where h=?',(hostmane,))
+        C.execute('delete from hosts_for_ping where h=?',(hostmane,))
     except sqlite3.OperationalError:
         print("""Host dont find \n
               enter correct hostname""")
     else:
-        connection.commit()
-        c.close()
+        CONNECTION.commit()
 
 def fetch_hosts(primary = True):
-    hostnames = []
-    times = []
+    hosts = []
     try:
-        for hostname, time in c.execute('select h,t  from hosts_for_ping where p=?',(primary,)):
-            hostnames.append(hostname)
-            times.append(time)
+        for hostname, time in C.execute('select h,t  from hosts_for_ping where p=?',(True,)):
+            i = Hosts(hostname, time)
+            hosts.append(i)
+        return hosts
+
     except sqlite3.OperationalError:
-        print('DB is empty, add host first \n')
-        hlp()
-    else:
-        c.close()
-        return hostnames, times
+        CONNECTION.commit()
+
+def parse_options():
+    parser = OptionParser(
+            usage=("Usage: %prog [option [delay time]]\n"))
+    parser.add_option("-a", "--add", dest="add_host",
+            default=False,
+            help="add host to ping into DB", metavar="HOSTNAME [TIME DELAY]")
+    parser.add_option("-d", "--delete", dest="del_host", default=False,
+                      help="delete host on DB", metavar="HOSTNAME")
+    parser.add_option("-l", "--list", action='store_true', dest='list_hosts', default=False,
+                        help="Print list of host")
+    opts, args = parser.parse_args()
+    if opts.add_host is not False:
+        if len(args) != 1:
+            parser.error('There should be one delay time for the host')
+        try:
+            args = int(args[0])
+        except(ValueError):
+            parser.error('Delay time must be integer')
+        return opts, args
+    else: return opts, False
 
 
-connection =  sqlite3.connect("upmondb")
-c = connection.cursor()
-hosts_primary = []
-h_times = []
-hosts_primary , h_times = fetch_hosts()
+def main():
 
+    sheduler_queue = queue.Queue()
+    Time_sleep = 15
+    opts, args = parse_options()
+    hosts_primary = fetch_hosts()
 
-#try:
-#    c.execute('create table ping_stat(h,s,t)')
-#except sqlite3.OperationalError:                   :TODO разобраться как это должно выглядеть
-#    pass
-if len(sys.argv) > 1:
-    try:
-        if sys.argv[1] in ('-h','-help','--help'):
-            hlp()
-        elif sys.argv[1] == '-add':             #Р ВµРЎРѓР В»Р С‘ Р Т‘Р С•Р В±Р В°Р Р†Р В»РЎРЏР ВµР С
-            if len(sys.argv) == 3:
-                ins_db(sys.argv[2])
+    if opts.add_host:
+        ins_db(opts.add_host, args)
+        sys.exit()
+    if len(hosts_primary) == 0:
+        print('DB is empty, add host first \n'
+            'use -h or --help to print help message')
+        sys.exit(1)
+    if opts.del_host is not False:
+        for tmp_host in hosts_primary:
+            if opts.del_host == tmp_host:
+                del_db(opts.del_host)
+                print('{0} removed from DB'.format(opts.del_host))
+                sys.exit()
             else:
-                ins_db(sys.argv[2],sys.argv[3])
-        elif sys.argv[1] == '-del':
-            del_db(sys.argv[2])
-#        elif sys.argv[1] == '-d':
-#            while True:
-#                ping_add_result_in_db()
-    except IndexError:
-        print(hlp())
+                print('{0} not found in the database'.format(opts.del_host))
+                sys.exit(1)
+    if opts.list_hosts is True:
+        for iter_tmp in fetch_hosts():
+            print ('Host: {0} Delay time: {1}'.format(iter_tmp.name(), iter_tmp.delay()))
+        sys.exit()
 
 
-for hostname in hosts_primary:
-    print (hostname, 'hostname \n !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1')
-    Ping_host(hostname).start()
+    sheduler = Sheduler(sheduler_queue, hosts_primary)
+    sheduler.daemon = True
+    sheduler.start()
 
+    ph = Ping_host(sheduler_queue)
+    ph.daemon = True
+    ph.start()
+    time.sleep(1)
 
-#print('Table 1\n')
-#for i in c.execute('select * from hosts_for_ping'):
-#    print(i, ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1')
-#print('Table 2\n')
-#for i in c.execute('select * from ping_stat'):
-#    print(i)
-c.close()
+    C.close()
+if __name__ == '__main__':
+    main()
